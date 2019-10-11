@@ -7,6 +7,55 @@ const util = require('../util')
 
 const registeredEvents = {}
 
+const validateEvent = (ipc, event, handler) => {
+  const shouldBeAFunction = () => {
+    if (!_.isFunction(handler)) {
+      return {
+        isValid: false,
+        error: new Error(`Plugin ${event} event handler should be a function`),
+      }
+    }
+
+    return { isValid: true }
+  }
+  const shouldBeAnObject = () => {
+    if (!_.isPlainObject(handler)) {
+      return {
+        isValid: false,
+        error: new Error(`Plugin ${event} event handler should be an object`),
+      }
+    }
+
+    return { isValid: true }
+  }
+  const eventValidators = {
+    'file:preprocessor': shouldBeAFunction,
+    'before:browser:launch': shouldBeAFunction,
+    'task': shouldBeAnObject,
+    'after:screenshot': shouldBeAFunction,
+    '_get:task:keys': shouldBeAFunction,
+    '_get:task:body': shouldBeAFunction,
+  }
+
+  const validator = eventValidators[event]
+
+  if (!validator) {
+    sendError(ipc, new Error('SHU 1'))
+
+    return false
+  }
+
+  const result = validator()
+
+  if (!result.isValid) {
+    sendError(ipc, result.error)
+
+    return false
+  }
+
+  return true
+}
+
 const invoke = (eventId, args = [], ipc) => {
   const event = registeredEvents[eventId]
 
@@ -40,6 +89,7 @@ const load = (ipc, config, pluginsFile) => {
   // we track the register calls and then send them all at once
   // to the parent process
   const register = (event, handler) => {
+    validateEvent(ipc, event, handler)
     if (event === 'task') {
       const existingEventId = _.findKey(registeredEvents, { event: 'task' })
 
